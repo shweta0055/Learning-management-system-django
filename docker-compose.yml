@@ -12,17 +12,31 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Build Containers
+      # 🔥 FORCE CLEAN DOCKER STATE
+      - name: Clean Docker
+        run: |
+          docker compose down -v || true
+          docker system prune -af || true
+
+      - name: Build & Start Containers
         run: docker compose up -d --build
 
       - name: Wait for Services
-        run: sleep 60
+        run: sleep 70
 
-      - name: Run Django Migrations
+      # 🔥 FIX PERMISSION DIRECTLY (IMPORTANT)
+      - name: Fix MySQL Permissions
+        run: |
+          docker exec $(docker ps -qf "name=db") mysql -uroot -plms_root_password -e "
+          GRANT ALL PRIVILEGES ON *.* TO 'lms_user'@'%' WITH GRANT OPTION;
+          FLUSH PRIVILEGES;
+          "
+
+      - name: Run Migrations
         run: |
           docker exec $(docker ps -qf "name=django") python manage.py migrate
 
-      - name: Run Django Tests
+      - name: Run Tests
         run: |
           docker exec $(docker ps -qf "name=django") pytest
 
@@ -31,7 +45,7 @@ jobs:
           curl -f http://localhost:8000/api/schema/ || exit 1
           curl -f http://localhost:8001/docs || exit 1
 
-      - name: Logs on Failure
+      - name: Logs (if failed)
         if: failure()
         run: docker compose logs
 

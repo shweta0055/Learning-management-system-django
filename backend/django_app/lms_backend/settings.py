@@ -5,6 +5,11 @@ import os
 from pathlib import Path
 from datetime import timedelta
 from decouple import config
+import sys
+
+if "test" in sys.argv:
+    DATABASES["default"]["USER"] = "root"
+    DATABASES["default"]["PASSWORD"] = "lms_root_password"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -12,6 +17,8 @@ SECRET_KEY = config('DJANGO_SECRET_KEY', default='django-insecure-change-me-in-p
 DEBUG = config('DEBUG', default=True, cast=bool)
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='*').split(',')
+
+
 
 INSTALLED_APPS = [
     'django.contrib.admin',
