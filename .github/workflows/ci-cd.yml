@@ -32,8 +32,6 @@ jobs:
           --health-start-period 30s
         ports:
           - 3306:3306
-        volumes:
-          - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
 
       redis:
         image: redis:7
