@@ -49,6 +49,9 @@ class CourseCreateView(generics.CreateAPIView):
     serializer_class = CourseCreateUpdateSerializer
     permission_classes = [IsInstructorOrAdmin]
 
+    def perform_create(self, serializer):
+        serializer.save(instructor=self.request.user)
+
 
 class CourseUpdateView(generics.UpdateAPIView):
     serializer_class = CourseCreateUpdateSerializer
