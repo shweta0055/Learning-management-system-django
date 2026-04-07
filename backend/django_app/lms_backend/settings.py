@@ -7,9 +7,6 @@ from datetime import timedelta
 from decouple import config
 import sys
 
-if "test" in sys.argv:
-    DATABASES["default"]["USER"] = "root"
-    DATABASES["default"]["PASSWORD"] = "lms_root_password"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -76,23 +73,20 @@ TEMPLATES = [
 WSGI_APPLICATION = 'lms_backend.wsgi.application'
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': config('DB_NAME', default='lms_db'),
-        'USER': config('DB_USER', default='lms_user'),
-        'PASSWORD': config('DB_PASSWORD', default='lms_password'),
-        'HOST': config('DB_HOST', default='db'),
-        'PORT': config('DB_PORT', default='3306'),
-        'OPTIONS': {
-            'charset': 'utf8mb4',
-            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",    
-        },
-        "TEST": {
-            "NAME": "test_lms_db",
-        },
+    "default": {
+        "ENGINE": "django.db.backends.mysql",
+        "NAME": "lms_db",
+        "USER": "lms_user",
+        "PASSWORD": "lms_password",
+        "HOST": "db",
+        "PORT": "3306",
     }
 }
 
+# 🔥 FIX FOR TESTS
+if "test" in sys.argv or "pytest" in sys.modules:
+    DATABASES["default"]["USER"] = "root"
+    DATABASES["default"]["PASSWORD"] = "lms_root_password"
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},

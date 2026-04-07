@@ -12,61 +12,42 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 🔥 Clean Docker
       - name: Clean Docker
         run: |
           docker compose down -v || true
           docker system prune -af || true
 
-      # 🚀 Start Containers
       - name: Build & Start Containers
         run: docker compose up -d --build
 
-      # ⏳ Wait for DB properly (NOT just sleep)
       - name: Wait for MySQL
         run: |
-          echo "Waiting for MySQL..."
           for i in {1..30}; do
             docker exec $(docker ps -qf "name=db") mysqladmin ping -h "localhost" -uroot -plms_root_password && break
-            echo "MySQL not ready yet..."
             sleep 5
           done
 
-      # 🔥 Fix Permissions AFTER DB is ready
-      - name: Fix MySQL Permissions
-        run: |
-          docker exec $(docker ps -qf "name=db") mysql -uroot -plms_root_password -e "
-          GRANT ALL PRIVILEGES ON *.* TO 'lms_user'@'%' WITH GRANT OPTION;
-          FLUSH PRIVILEGES;
-          "
-
-      # 🔄 Run Migrations
       - name: Run Migrations
         run: |
           docker exec $(docker ps -qf "name=django") python manage.py migrate
 
-      # 🧪 Run Django Tests
       - name: Run Django Tests
         run: |
           docker exec $(docker ps -qf "name=django") pytest
 
-      # 🌐 Check APIs
       - name: Check APIs
         run: |
           curl -f http://localhost:8000/api/schema/ || exit 1
           curl -f http://localhost:8001/docs || exit 1
 
-      # ⚛️ Build React (FIX YOUR SECOND ERROR)
-      - name: Check Frontend via Docker
+      - name: Check Frontend
         run: |
           curl -f http://localhost:3000 || exit 1
 
-      # 📜 Logs if failure
       - name: Logs (if failed)
         if: failure()
         run: docker compose logs
 
-      # 🛑 Stop Containers
       - name: Stop Containers
         if: always()
         run: docker compose down
