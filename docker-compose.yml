@@ -1,158 +1,56 @@
-services:
+name: LMS Docker CI/CD
 
-  # ── MySQL ─────────────────────────────────────────────────────────────────
-  db:
-    image: mysql:8.0
-    restart: always
-    environment:
-      MYSQL_DATABASE: lms_db
-      MYSQL_USER: lms_user
-      MYSQL_PASSWORD: lms_password
-      MYSQL_ROOT_PASSWORD: lms_root_password
-    volumes:
-      - mysql_data:/var/lib/mysql
-      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    ports:
-      - "3306:3306"
-    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-authentication-plugin=mysql_native_password
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "lms_user", "-plms_password"]
-      interval: 10s
-      timeout: 10s
-      retries: 15
-      start_period: 30s
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
-  # ── Redis ─────────────────────────────────────────────────────────────────
-  redis:
-    image: redis:7-alpine
-    restart: always
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
-  # ── Django ────────────────────────────────────────────────────────────────
-  django:
-    build:
-      context: ./backend/django_app
-      dockerfile: Dockerfile
-    restart: always
-    env_file:
-      - ./backend/django_app/.env
-    volumes:
-      - django_media:/app/media
-      - django_static:/app/staticfiles
-    ports:
-      - "8000:8000"
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8000/api/schema/ > /dev/null || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 15
-      start_period: 60s
+jobs:
+  docker-test:
+    runs-on: ubuntu-latest
 
-  # ── Celery Worker ─────────────────────────────────────────────────────────
-  celery:
-    build:
-      context: ./backend/django_app
-      dockerfile: Dockerfile
-    restart: always
-    env_file:
-      - ./backend/django_app/.env
-    volumes:
-      - django_media:/app/media
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    entrypoint: []
-    command: >
-      sh -c "
-        echo 'Waiting for MySQL...' &&
-        while ! nc -z db 3306; do sleep 1; done &&
-        echo 'Waiting for Redis...' &&
-        while ! nc -z redis 6379; do sleep 1; done &&
-        celery -A lms_backend worker --loglevel=info --concurrency=2
-      "
+    steps:
+      # ── Checkout Code ───────────────────────────────
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-  # ── Celery Beat ───────────────────────────────────────────────────────────
-  celery-beat:
-    build:
-      context: ./backend/django_app
-      dockerfile: Dockerfile
-    restart: always
-    env_file:
-      - ./backend/django_app/.env
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    entrypoint: []
-    command: >
-      sh -c "
-        echo 'Waiting for MySQL...' &&
-        while ! nc -z db 3306; do sleep 1; done &&
-        echo 'Waiting for Redis...' &&
-        while ! nc -z redis 6379; do sleep 1; done &&
-        celery -A lms_backend beat --loglevel=info
-      "
+      # ── Build & Start All Services ──────────────────
+      - name: Build and Start Containers
+        run: docker compose up -d --build
 
-  # ── FastAPI ───────────────────────────────────────────────────────────────
-  fastapi:
-    build:
-      context: ./backend/fastapi_service
-      dockerfile: Dockerfile
-    restart: always
-    env_file:
-      - ./backend/fastapi_service/.env
-    ports:
-      - "8001:8001"
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      # ── Wait for Services to be Ready ───────────────
+      - name: Wait for Services
+        run: sleep 60
 
-  # ── React Frontend ────────────────────────────────────────────────────────
-  frontend:
-    build:
-      context: ./frontend/react_app
-      dockerfile: Dockerfile
-      args:
-        REACT_APP_DJANGO_API_URL: http://localhost:8000
-        REACT_APP_FASTAPI_URL: http://localhost:8001
-    restart: always
-    ports:
-      - "3000:80"
-    depends_on:
-      - django
-      - fastapi
+      # ── Debug Running Containers ────────────────────
+      - name: Show Running Containers
+        run: docker ps
 
-  # ── Nginx Reverse Proxy ───────────────────────────────────────────────────
-  nginx:
-    image: nginx:alpine
-    restart: always
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - django_static:/var/www/static:ro
-      - django_media:/var/www/media:ro
-    depends_on:
-      django:
-        condition: service_healthy
+      # ── Check Django Health ─────────────────────────
+      - name: Check Django API
+        run: |
+          curl -f http://localhost:8000/api/schema/ || exit 1
 
-volumes:
-  mysql_data:
-  django_media:
-  django_static:
+      # ── Check FastAPI Health ────────────────────────
+      - name: Check FastAPI API
+        run: |
+          curl -f http://localhost:8001/docs || exit 1
+
+      # ── Check Frontend ──────────────────────────────
+      - name: Check Frontend
+        run: |
+          curl -f http://localhost:3000 || exit 1
+
+      # ── Show Logs on Failure ────────────────────────
+      - name: Show Logs (if failed)
+        if: failure()
+        run: docker compose logs
+
+      # ── Shutdown Containers ─────────────────────────
+      - name: Stop Containers
+        if: always()
+        run: docker compose down
