@@ -224,17 +224,19 @@ jobs:
     if: github.ref == 'refs/heads/main'
     environment: production
 
-    steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script: |
-            cd /opt/lms
-            docker compose pull
-            docker compose up -d --remove-orphans
-            docker compose exec -T django python manage.py migrate
-            docker system prune -f
-            echo "Deployment complete ✓"
+    # steps:
+    #   - name: Deploy via SSH
+    #     uses: appleboy/ssh-action@v1
+    #     with:
+    #       host: ${{ secrets.DEPLOY_HOST }}
+    #       username: ${{ secrets.DEPLOY_USER }}
+    #       key: ${{ secrets.DEPLOY_SSH_KEY }}
+    #       script: |
+    #         cd /opt/lms
+    #         docker compose pull
+    #         docker compose up -d --remove-orphans
+    #         docker compose exec -T django python manage.py migrate
+    #         docker system prune -f
+    #         echo "Deployment complete ✓"
+
+   
