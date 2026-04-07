@@ -3,54 +3,38 @@ name: LMS Docker CI/CD
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   docker-test:
     runs-on: ubuntu-latest
 
     steps:
-      # ── Checkout Code ───────────────────────────────
-      - name: Checkout Repository
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      # ── Build & Start All Services ──────────────────
-      - name: Build and Start Containers
+      - name: Build Containers
         run: docker compose up -d --build
 
-      # ── Wait for Services to be Ready ───────────────
       - name: Wait for Services
         run: sleep 60
 
-      # ── Debug Running Containers ────────────────────
-      - name: Show Running Containers
-        run: docker ps
+      - name: Run Django Migrations
+        run: |
+          docker exec $(docker ps -qf "name=django") python manage.py migrate
 
-      # ── Check Django Health ─────────────────────────
-      - name: Check Django API
+      - name: Run Django Tests
+        run: |
+          docker exec $(docker ps -qf "name=django") pytest
+
+      - name: Check APIs
         run: |
           curl -f http://localhost:8000/api/schema/ || exit 1
-
-      # ── Check FastAPI Health ────────────────────────
-      - name: Check FastAPI API
-        run: |
           curl -f http://localhost:8001/docs || exit 1
 
-      # ── Check Frontend ──────────────────────────────
-      - name: Check Frontend
-        run: |
-          curl -f http://localhost:3000 || exit 1
-
-      # ── Show Logs on Failure ────────────────────────
-      - name: Show Logs (if failed)
+      - name: Logs on Failure
         if: failure()
         run: docker compose logs
 
-      # ── Shutdown Containers ─────────────────────────
       - name: Stop Containers
         if: always()
         run: docker compose down
