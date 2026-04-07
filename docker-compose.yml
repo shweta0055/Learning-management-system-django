@@ -57,11 +57,9 @@ jobs:
           curl -f http://localhost:8001/docs || exit 1
 
       # ⚛️ Build React (FIX YOUR SECOND ERROR)
-      - name: Build React
+      - name: Check Frontend via Docker
         run: |
-          cd frontend/react_app
-          npm install
-          npm run build
+          curl -f http://localhost:3000 || exit 1
 
       # 📜 Logs if failure
       - name: Logs (if failed)
