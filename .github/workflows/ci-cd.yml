@@ -32,6 +32,8 @@ jobs:
           --health-start-period 30s
         ports:
           - 3306:3306
+        volumes:
+          - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
 
       redis:
         image: redis:7
@@ -73,6 +75,10 @@ jobs:
             echo "Waiting for MySQL... attempt $i"
             sleep 3
           done
+
+      - name: Grant MySQL permissions for Django CI user
+        run: |
+          mysql -h 127.0.0.1 -u root -proot_password -e "CREATE USER IF NOT EXISTS 'lms_user'@'%' IDENTIFIED BY 'lms_password'; ALTER USER 'lms_user'@'%' IDENTIFIED BY 'lms_password'; GRANT ALL PRIVILEGES ON *.* TO 'lms_user'@'%' WITH GRANT OPTION; FLUSH PRIVILEGES;"
 
       - name: Run migrations & tests
         env:
