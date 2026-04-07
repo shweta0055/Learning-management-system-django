@@ -75,18 +75,14 @@ WSGI_APPLICATION = 'lms_backend.wsgi.application'
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.mysql",
-        "NAME": os.getenv("DB_NAME"),
-        "USER": os.getenv("DB_USER"),
-        "PASSWORD": os.getenv("DB_PASSWORD"),
-        "HOST": os.getenv("DB_HOST"),
-        "PORT": "3306",
+        "NAME": config("DB_NAME", default="lms_db"),
+        "USER": config("DB_USER", default="lms_user"),
+        "PASSWORD": config("DB_PASSWORD", default="lms_password"),
+        "HOST": config("DB_HOST", default="127.0.0.1"),
+        "PORT": config("DB_PORT", default="3306"),
     }
 }
 
-# 🔥 FIX FOR TESTS
-if "test" in sys.argv or "pytest" in sys.modules:
-    DATABASES["default"]["USER"] = "root"
-    DATABASES["default"]["PASSWORD"] = "lms_root_password"
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
