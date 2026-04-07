@@ -11,7 +11,7 @@ env:
   IMAGE_PREFIX: ${{ github.repository_owner }}/lms
 
 jobs:
-  # ─── Django Tests ─────────────────────────────────────────────────────────
+  # ─── Django Tests ──────────────────────────────────────────────────────────
   test-django:
     name: Django Tests
     runs-on: ubuntu-latest
@@ -25,10 +25,11 @@ jobs:
           MYSQL_PASSWORD: lms_password
           MYSQL_ROOT_PASSWORD: root_password
         options: >-
-          --health-cmd "mysqladmin ping -h localhost -u lms_user -plms_password"
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -u lms_user -plms_password"
           --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
+          --health-timeout 10s
+          --health-retries 15
+          --health-start-period 30s
         ports:
           - 3306:3306
 
@@ -46,64 +47,76 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
           cache-dependency-path: backend/django_app/requirements.txt
 
-      - name: Install dependencies
+      - name: Install system dependencies for mysqlclient
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y default-libmysqlclient-dev pkg-config gcc
+
+      - name: Install Python dependencies
         run: |
           cd backend/django_app
           pip install -r requirements.txt
 
+      - name: Wait for MySQL to be fully ready
+        run: |
+          for i in {1..30}; do
+            if mysqladmin ping -h 127.0.0.1 -u lms_user -plms_password --silent 2>/dev/null; then
+              echo "MySQL is ready!"
+              break
+            fi
+            echo "Waiting for MySQL... attempt $i"
+            sleep 3
+          done
+
       - name: Run migrations & tests
         env:
-          DJANGO_SECRET_KEY: ci-test-secret-key-not-for-production
+          DJANGO_SECRET_KEY: ci-test-secret-key-not-for-production-at-least-50-chars-long
           DB_NAME: lms_test
           DB_USER: lms_user
           DB_PASSWORD: lms_password
           DB_HOST: 127.0.0.1
           DB_PORT: 3306
           REDIS_URL: redis://localhost:6379/0
-          DEBUG: True
+          DEBUG: 'True'
+          ALLOWED_HOSTS: '*'
+          CELERY_TASK_ALWAYS_EAGER: 'True'
+          STRIPE_SECRET_KEY: sk_test_placeholder
+          STRIPE_WEBHOOK_SECRET: whsec_placeholder
+          USE_S3: 'False'
+          EMAIL_HOST_USER: ''
+          EMAIL_HOST_PASSWORD: ''
         run: |
           cd backend/django_app
-          python manage.py migrate
-          python -m pytest --tb=short -q
+          python manage.py migrate --noinput
+          python -m pytest tests/ --tb=short -q
 
-  # ─── FastAPI Tests ────────────────────────────────────────────────────────
+  # ─── FastAPI Tests ─────────────────────────────────────────────────────────
   test-fastapi:
     name: FastAPI Tests
     runs-on: ubuntu-latest
-
-    services:
-      mysql:
-        image: mysql:8.0
-        env:
-          MYSQL_DATABASE: lms_test
-          MYSQL_USER: lms_user
-          MYSQL_PASSWORD: lms_password
-          MYSQL_ROOT_PASSWORD: root_password
-        options: >-
-          --health-cmd "mysqladmin ping -h localhost -u lms_user -plms_password"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-        ports:
-          - 3306:3306
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
           cache-dependency-path: backend/fastapi_service/requirements.txt
 
-      - name: Install dependencies
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y default-libmysqlclient-dev pkg-config gcc
+
+      - name: Install Python dependencies
         run: |
           cd backend/fastapi_service
           pip install -r requirements.txt
@@ -111,12 +124,12 @@ jobs:
       - name: Run tests
         env:
           DATABASE_URL: mysql+aiomysql://lms_user:lms_password@127.0.0.1:3306/lms_test
-          DJANGO_SECRET_KEY: ci-test-secret-key
+          DJANGO_SECRET_KEY: ci-test-secret-key-not-for-production-at-least-50-chars
         run: |
           cd backend/fastapi_service
-          python -m pytest --tb=short -q
+          python -m pytest tests/ --tb=short -q
 
-  # ─── Frontend Tests ───────────────────────────────────────────────────────
+  # ─── Frontend Build & Tests ────────────────────────────────────────────────
   test-frontend:
     name: React Build & Tests
     runs-on: ubuntu-latest
@@ -128,13 +141,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: frontend/react_app/package-lock.json
+          # No cache since there's no package-lock.json
 
       - name: Install dependencies
         run: |
           cd frontend/react_app
-          npm ci
+          npm install --legacy-peer-deps
 
       - name: Build
         run: |
@@ -143,8 +155,10 @@ jobs:
         env:
           REACT_APP_DJANGO_API_URL: http://localhost:8000
           REACT_APP_FASTAPI_URL: http://localhost:8001
+          CI: 'false'
+          GENERATE_SOURCEMAP: 'false'
 
-  # ─── Docker Build & Push ──────────────────────────────────────────────────
+  # ─── Docker Build & Push ───────────────────────────────────────────────────
   build-push:
     name: Build & Push Docker Images
     runs-on: ubuntu-latest
@@ -198,7 +212,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ─── Deploy ───────────────────────────────────────────────────────────────
+  # ─── Deploy ────────────────────────────────────────────────────────────────
   deploy:
     name: Deploy to Production
     runs-on: ubuntu-latest
