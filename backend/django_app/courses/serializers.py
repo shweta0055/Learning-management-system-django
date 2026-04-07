@@ -78,6 +78,7 @@ class CourseCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Course
         exclude = ['instructor', 'total_students', 'rating', 'total_ratings', 'created_at', 'updated_at']
+        read_only_fields = ['slug']
 
     def create(self, validated_data):
         validated_data['instructor'] = self.context['request'].user
